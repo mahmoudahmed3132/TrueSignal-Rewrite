@@ -1,0 +1,56 @@
+// Excerpt (verbatim) from Hub/internal/services/auth/mfa.go at f4455a0: recovery-code helpers.
+// Lines touching s.store / s.recoveryHashes / log are the old project's storage glue: replace them with this repository's store.
+
+func normalizeCode(code string) string {
+	code = strings.ToLower(strings.TrimSpace(code))
+	return strings.NewReplacer(" ", "", "-", "").Replace(code)
+}
+
+func hashRecovery(code string) string {
+	sum := sha256.Sum256([]byte("truesignal-recovery:" + normalizeCode(code)))
+	return hex.EncodeToString(sum[:])
+}
+
+
+func (s *Service) consumeRecoveryLocked(code string) bool {
+	if len(code) != 10 {
+		return false
+	}
+	want := hashRecovery(code)
+	hashes := s.recoveryHashes()
+	for i, h := range hashes {
+		if subtle.ConstantTimeCompare([]byte(h), []byte(want)) == 1 {
+			rest := append(append([]string{}, hashes[:i]...), hashes[i+1:]...)
+			if err := s.store.UpdateConfigValue(mfaRecoveryKey, strings.Join(rest, ",")); err != nil {
+				log.Printf("[ERROR] MFA: could not consume recovery code: %v", err)
+				return false
+			}
+			log.Printf("[!] AUDIT: MFA recovery code used; %d remaining", len(rest))
+			return true
+		}
+	}
+	return false
+}
+
+// newRecoveryCodes returns fresh codes (shown once) and stores their hashes.
+func (s *Service) newRecoveryCodes() ([]string, error) {
+	codes := make([]string, recoveryCodeCount)
+	hashes := make([]string, recoveryCodeCount)
+	for i := range codes {
+		raw := make([]byte, 7)
+		if _, err := rand.Read(raw); err != nil {
+			return nil, err
+		}
+		c := strings.ToLower(b32.EncodeToString(raw))[:10] // 50 bits
+		codes[i] = c[:5] + "-" + c[5:]
+		hashes[i] = hashRecovery(c)
+	}
+	if err := s.store.UpdateConfigValue(mfaRecoveryKey, strings.Join(hashes, ",")); err != nil {
+		return nil, err
+	}
+	return codes, nil
+}
+
+// --- Enrollment and management ---
+
+// BeginEnrollment re-checks the password and returns a new secret. It is
