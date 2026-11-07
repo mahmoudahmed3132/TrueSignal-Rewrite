@@ -4,7 +4,7 @@ go 1.26.0
 
 toolchain go1.26.10
 
-require modernc.org/sqlite v1.61.0
+require modernc.org/sqlite v1.61.1
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
