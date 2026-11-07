@@ -11,7 +11,7 @@
     "check": "npm run typecheck && node scripts/lint-safety.mjs && npm run build"
   },
   "dependencies": {
-    "preact": "11.1.0"
+    "preact": "11.1.1"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
